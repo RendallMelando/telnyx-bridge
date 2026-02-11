@@ -1,94 +1,77 @@
 // server.js
-require("dotenv").config();
 
+require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 
 const app = express();
 
-// FIX: Telnyx sends "application/json; charset=utf-8"
-// This ensures the body is parsed correctly.
-app.use(express.json({ type: "*/*" }));
+// Parse JSON bodies from Telnyx
+app.use(express.json());
 
-// Basic config
-const PORT = process.env.PORT || 3000;
-
-// Health check
+// Simple health check
 app.get("/", (req, res) => {
   res.send("Telnyx Translator Bridge is running.");
 });
 
-// ---------------------------------------------------------
-// TELNYX WEBHOOK HANDLER
-// ---------------------------------------------------------
+// Telnyx Call Control webhook
 app.post("/telnyx/webhook", (req, res) => {
-  const event = req.body;
-
   console.log("TELNYX WEBHOOK EVENT");
-  console.log(JSON.stringify(event, null, 2));
+  console.log(JSON.stringify(req.body, null, 2));
 
+  const event = req.body;
   const eventType = event?.data?.event_type;
-  const payload = event?.data?.payload || {};
 
-  let responseCommands = [];
+  if (eventType === "call.initiated") {
+    console.log("→ Incoming call started (ringing)");
 
-  switch (eventType) {
-    case "call.initiated":
-      console.log("→ Incoming call started (ringing)");
+    const response = [
+      { instruction: "answer" },
+      {
+        instruction: "start_stream",
+        stream_url: "wss://telnyx-bridge.onrender.com/telnyx/media",
+      },
+    ];
 
-      responseCommands = [
-        { instruction: "answer" },
-        {
-          instruction: "start_stream",
-          stream_url: "wss://telnyx-bridge.onrender.com/telnyx/media"
-        }
-      ];
-      break;
-
-    case "call.answered":
-      console.log("→ Call was answered");
-      responseCommands = [];
-      break;
-
-    case "call.hangup":
-    case "call.completed":
-      console.log("→ Call ended");
-      responseCommands = [];
-      break;
-
-    default:
-      console.log("→ No action for this event type:", eventType);
-      responseCommands = [];
-      break;
+    console.log("→ Responding with:", JSON.stringify(response));
+    return res.json(response);
   }
 
-  console.log("→ Responding with:", JSON.stringify(responseCommands));
-  return res.json(responseCommands);
+  console.log("→ Unhandled event type:", eventType);
+  return res.json([]);
 });
 
-// ---------------------------------------------------------
-// WEBSOCKET SERVER FOR MEDIA STREAM
-// ---------------------------------------------------------
+// Create HTTP server
 const httpServer = http.createServer(app);
-const wss = new WebSocket.Server({ server: httpServer, path: "/telnyx/media" });
 
-wss.on("connection", (ws) => {
+// WebSocket server for Telnyx media stream
+const wss = new WebSocket.Server({
+  server: httpServer,
+  path: "/telnyx/media",
+});
+
+wss.on("connection", (ws, req) => {
   console.log("MEDIA WS CONNECTED");
 
-  ws.on("message", (msg) => {
-    console.log("MEDIA WS MESSAGE BYTES:", msg.length);
-    // Here you will decode audio, send to OpenAI, etc.
+  ws.on("message", (data) => {
+    console.log("MEDIA WS MESSAGE BYTES:", data.length);
+    // Later: decode audio, send to OpenAI, etc.
   });
 
   ws.on("close", () => {
     console.log("MEDIA WS CLOSED");
   });
+
+  ws.on("error", (err) => {
+    console.error("MEDIA WS ERROR:", err.message);
+  });
 });
 
-// ---------------------------------------------------------
-// START SERVER
-// ---------------------------------------------------------
+// Port (Render sets PORT in env)
+const PORT = process.env.PORT || 10000;
+
 httpServer.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
