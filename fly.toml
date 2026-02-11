@@ -7,7 +7,7 @@ app = 'rendall'
 primary_region = 'fra'
 
 [build]
-  builder = "heroku/buildpacks:20"
+  builder = "paketobuildpacks/builder-jammy-base"
 
 [http_service]
   internal_port = 8080
