@@ -69,7 +69,7 @@ wss.on("connection", (ws, req) => {
 });
 
 // Port (Render sets PORT in env)
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT;
 
 httpServer.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
